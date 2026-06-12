@@ -1,0 +1,3 @@
+# Local-only tooling / OS noise — not for the published Pages site
+.claude/
+.DS_Store

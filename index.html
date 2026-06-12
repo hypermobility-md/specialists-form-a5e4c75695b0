@@ -93,14 +93,34 @@
   <!-- 4. Field -->
   <section>
     <div class="step-label">4. What is your primary field?</div>
-    <div class="step-hint">Tap any that apply, or add your own below.</div>
+    <div class="step-hint">Select any that apply, or add your own below.</div>
     <div class="chip-group" id="fieldChips"></div>
     <input type="text" id="fieldOther" placeholder="Other field">
   </section>
 
-  <!-- 5. Contact -->
+  <!-- 5. Conditions -->
   <section>
-    <div class="step-label">5. Practice's contact</div>
+    <div class="step-label">5. Which conditions do you treat?</div>
+    <div class="step-hint">Select any you regularly see.</div>
+    <div class="chip-group" id="conditionChips"></div>
+    <input type="text" id="conditionOther" placeholder="Other conditions (optional)">
+  </section>
+
+  <!-- 6. Therapies & special populations -->
+  <section>
+    <div class="step-label">6. Therapies &amp; special populations</div>
+    <div class="step-hint">Optional. Tap any that apply.</div>
+    <label>Therapies you provide</label>
+    <div class="chip-group" id="therapyChips"></div>
+    <input type="text" id="therapyOther" placeholder="Other therapies (optional)">
+    <label style="margin-top:6px;">Special populations</label>
+    <div class="chip-group" id="populationChips"></div>
+    <input type="text" id="populationOther" placeholder="Other populations (optional)">
+  </section>
+
+  <!-- 7. Contact -->
+  <section>
+    <div class="step-label">7. Practice's contact</div>
     <div class="row">
       <div><label for="email">Your email</label><input type="email" id="email" placeholder="your@email.com"></div>
       <div><label for="phone">Your phone number</label><input type="tel" id="phone" placeholder="(123)-456-789"></div>
@@ -109,7 +129,7 @@
 
   <!-- Notes -->
   <section>
-    <div class="step-label">6. Anything else patients should know?</div>
+    <div class="step-label">8. Anything else patients should know?</div>
     <div class="step-hint">Not a bio; Just practical info, e.g. "I accept telehealth", "I don't accept insurance", "I work at multiple clinics", "outside the US", "I am also lisenced in state X", ...</div>
     <textarea id="notes" placeholder="Other notes (optional)"></textarea>
   </section>
@@ -131,39 +151,35 @@
     const FIELDS = ['Genetics', 'Rheumatology', 'Cardiology', 'Physical Therapy', 'Pain Management',
       'Gastroenterology', 'Neurology', 'Allergy & Immunology', 'Physiatry (PM&R)', 'Primary Care',
       'Dysautonomia', 'Orthopedics', 'Psychiatry', 'Dentistry', 'Gynecology', 'Internal Medicine', 'Family Medicine', 'Pediatrics'];
+    const CONDITIONS = ['hEDS & HSD', 'MCAS', 'POTS / Dysautonomia', 'ME/CFS', 'Long COVID',
+      'Small Fiber Neuropathy', 'Craniocervical / Atlantoaxial Instability (CCI/AAI)', 'Chiari Malformation',
+      'Tethered Cord', 'Chronic Pain', 'Migraine & Headache', 'GI Dysmotility', 'Compression Syndromes (MALS, Nutcracker, etc.)'];
+    const THERAPIES = ['Physical Therapy', 'Occupational Therapy', 'Pelvic Floor Therapy', 'Speech Therapy',
+      'Exercise Physiology', 'Health Coaching', 'Neuropsych / Cognitive Rehab'];
+    const POPULATIONS = ['Children & Adolescents', 'Pregnancy & Postpartum', 'Menopause / Perimenopause',
+      'Athletes', 'Dancers & Performing Artists', 'LGBTQ+ Health'];
 
     // -------- Build chips --------
-    function buildCredChips() {
-      const c = document.getElementById('credChips');
-      CREDENTIALS.forEach(cred => {
+    // Each chip group is a set of toggle buttons; getChips() reads the active ones
+    // plus the optional free-text "other" field and joins them into one cell.
+    function buildChips(containerId, items) {
+      const c = document.getElementById(containerId);
+      items.forEach(item => {
         const b = document.createElement('button');
-        b.type = 'button'; b.className = 'chip'; b.textContent = cred;
+        b.type = 'button'; b.className = 'chip'; b.textContent = item;
         b.onclick = () => b.classList.toggle('active');
         c.appendChild(b);
       });
     }
-    function buildFieldChips() {
-      const c = document.getElementById('fieldChips');
-      FIELDS.forEach(f => {
-        const b = document.createElement('button');
-        b.type = 'button'; b.className = 'chip'; b.textContent = f;
-        b.onclick = () => b.classList.toggle('active');
-        c.appendChild(b);
-      });
-    }
-    buildCredChips();
-    buildFieldChips();
+    buildChips('credChips', CREDENTIALS);
+    buildChips('fieldChips', FIELDS);
+    buildChips('conditionChips', CONDITIONS);
+    buildChips('therapyChips', THERAPIES);
+    buildChips('populationChips', POPULATIONS);
 
-    function getCredentials() {
-      const chosen = [...document.querySelectorAll('#credChips .chip.active')].map(b => b.textContent);
-      const other = document.getElementById('credOther').value.trim();
-      if (other) chosen.push(other);
-      return chosen.join(', ');
-    }
-
-    function getField() {
-      const chosen = [...document.querySelectorAll('#fieldChips .chip.active')].map(b => b.textContent);
-      const other = document.getElementById('fieldOther').value.trim();
+    function getChips(containerId, otherId) {
+      const chosen = [...document.querySelectorAll('#' + containerId + ' .chip.active')].map(b => b.textContent);
+      const other = document.getElementById(otherId).value.trim();
       if (other) chosen.push(other);
       return chosen.join(', ');
     }
@@ -221,10 +237,17 @@
       if (!name) { showError('Please enter your name.'); return; }
 
       const stamp = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+      const conditions = getChips('conditionChips', 'conditionOther');
+      const therapies = getChips('therapyChips', 'therapyOther');
+      const populations = getChips('populationChips', 'populationOther');
       const userNotes = document.getElementById('notes').value.trim();
-      const notes = userNotes
-        ? `Self-referred submission at ${stamp}\n${userNotes}`
-        : `Self-referred submission at ${stamp}`;
+
+      // Structured Notes block: stamp + any non-column dimensions + the free-text note.
+      const noteLines = [`Self-referred submission at ${stamp}`];
+      if (therapies) noteLines.push(`Therapies: ${therapies}`);
+      if (populations) noteLines.push(`Special populations: ${populations}`);
+      if (userNotes) noteLines.push(userNotes);
+      const notes = noteLines.join('\n');
 
       const row = {
         '#':              '',
@@ -232,9 +255,9 @@
         "Rec'd By":       'Self Referred',
         'Recommendation': '',
         'Website':        document.getElementById('website').value.trim(),
-        'Title':          getCredentials(),
-        'Field':          getField(),
-        'Subspecialty':   '',
+        'Title':          getChips('credChips', 'credOther'),
+        'Field':          getChips('fieldChips', 'fieldOther'),
+        'Subspecialty':   conditions,
         'Street':         addr.street,
         'City':           addr.city,
         'State':          addr.state,
