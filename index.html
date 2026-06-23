@@ -71,22 +71,36 @@
 
   <!-- 3. Location -->
   <section>
-    <div class="step-label">3. Where is your practice?</div>
-    <div class="toggle-group">
-      <button type="button" class="toggle-btn active" data-mode="full" onclick="setAddrMode('full')">Paste full address</button>
-      <button type="button" class="toggle-btn" data-mode="parts" onclick="setAddrMode('parts')">Enter fields separately</button>
+    <div class="step-label">3. Where do you see patients?</div>
+    <div class="toggle-group" id="careModeGroup">
+      <button type="button" class="toggle-btn active" data-care="inperson" onclick="setCareMode('inperson')">In person</button>
+      <button type="button" class="toggle-btn" data-care="hybrid" onclick="setCareMode('hybrid')">In person + virtual</button>
+      <button type="button" class="toggle-btn" data-care="virtual" onclick="setCareMode('virtual')">Virtual only</button>
     </div>
-    <div id="addrFull">
-      <label for="fullAddress">Full address</label>
-      <textarea id="fullAddress" placeholder="123 Main St, Springfield, IL 62701"></textarea>
-    </div>
-    <div id="addrParts" class="hidden">
-      <label for="street">Street</label>
-      <input type="text" id="street" placeholder="Street address">
-      <div class="row">
-        <div><label for="city">City</label><input type="text" id="city" placeholder="City"></div>
-        <div><label for="state">State</label><input type="text" id="state" placeholder="State"></div>
+
+    <div id="addrBlock">
+      <div class="toggle-group" id="addrModeGroup">
+        <button type="button" class="toggle-btn active" data-mode="full" onclick="setAddrMode('full')">Paste full address</button>
+        <button type="button" class="toggle-btn" data-mode="parts" onclick="setAddrMode('parts')">Enter fields separately</button>
       </div>
+      <div id="addrFull">
+        <label for="fullAddress">Full address</label>
+        <textarea id="fullAddress" placeholder="123 Main St, Springfield, IL 62701"></textarea>
+      </div>
+      <div id="addrParts" class="hidden">
+        <label for="street">Street</label>
+        <input type="text" id="street" placeholder="Street address">
+        <div class="row">
+          <div><label for="city">City</label><input type="text" id="city" placeholder="City"></div>
+          <div><label for="state">State</label><input type="text" id="state" placeholder="State"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="virtualBlock" class="hidden">
+      <div class="step-hint">No physical address needed. List the states or regions where you're licensed to see patients.</div>
+      <label for="serviceArea">States / regions served</label>
+      <input type="text" id="serviceArea" placeholder="e.g. California, Texas, or 'Across the US'">
     </div>
   </section>
 
@@ -130,7 +144,7 @@
   <!-- Notes -->
   <section>
     <div class="step-label">8. Anything else patients should know?</div>
-    <div class="step-hint">Not a bio; Just practical info, e.g. "I accept telehealth", "I don't accept insurance", "I work at multiple clinics", "outside the US", "I am also lisenced in state X", ...</div>
+    <div class="step-hint">Not a bio; Just practical info, e.g. "I don't accept insurance", "I work at multiple clinics", "I offer coaching / educational support (non-prescribing)", "outside the US", "I am also lisenced in state X", ...</div>
     <textarea id="notes" placeholder="Other notes (optional)"></textarea>
   </section>
 
@@ -184,9 +198,21 @@
       return chosen.join(', ');
     }
 
+    // -------- Care mode toggle (in person / hybrid / telehealth only) --------
+    function setCareMode(mode) {
+      document.querySelectorAll('#careModeGroup .toggle-btn').forEach(b => b.classList.toggle('active', b.dataset.care === mode));
+      const virtualOnly = mode === 'virtual';
+      document.getElementById('addrBlock').classList.toggle('hidden', virtualOnly);
+      document.getElementById('virtualBlock').classList.toggle('hidden', !virtualOnly);
+    }
+    function getCareMode() {
+      const b = document.querySelector('#careModeGroup .toggle-btn.active');
+      return b ? b.dataset.care : 'inperson';
+    }
+
     // -------- Address mode toggle --------
     function setAddrMode(mode) {
-      document.querySelectorAll('.toggle-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+      document.querySelectorAll('#addrModeGroup .toggle-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
       document.getElementById('addrFull').classList.toggle('hidden', mode !== 'full');
       document.getElementById('addrParts').classList.toggle('hidden', mode !== 'parts');
     }
@@ -201,7 +227,7 @@
       if (fullVisible) {
         const raw = document.getElementById('fullAddress').value.trim();
         if (!raw) return { street: '', city: '', state: '' };
-        const parts = raw.split(',').map(s => s.trim()).filter(Boolean);
+        const parts = raw.split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
         if (parts.length >= 3) {
           return { street: parts.slice(0, parts.length - 2).join(', '), city: parts[parts.length - 2], state: stripZip(parts[parts.length - 1]) };
         } else if (parts.length === 2) {
@@ -233,7 +259,8 @@
     // -------- Submit --------
     async function submitForm() {
       const name = document.getElementById('name').value.trim();
-      const addr = getAddress();
+      const careMode = getCareMode();
+      const addr = careMode === 'virtual' ? { street: '', city: '', state: '' } : getAddress();
       if (!name) { showError('Please enter your name.'); return; }
 
       const stamp = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
@@ -241,9 +268,15 @@
       const therapies = getChips('therapyChips', 'therapyOther');
       const populations = getChips('populationChips', 'populationOther');
       const userNotes = document.getElementById('notes').value.trim();
+      const serviceArea = document.getElementById('serviceArea').value.trim();
 
       // Structured Notes block: stamp + any non-column dimensions + the free-text note.
       const noteLines = [`Self-referred submission at ${stamp}`];
+      if (careMode === 'virtual') {
+        noteLines.push(serviceArea ? `Virtual only (serves: ${serviceArea})` : 'Virtual only');
+      } else if (careMode === 'hybrid') {
+        noteLines.push('Offers virtual care');
+      }
       if (therapies) noteLines.push(`Therapies: ${therapies}`);
       if (populations) noteLines.push(`Special populations: ${populations}`);
       if (userNotes) noteLines.push(userNotes);
